@@ -13,6 +13,118 @@
         <span>THE BERBER</span>
       </a>
       <nav class="nav-links" aria-label="Panel menüsü">
+        <a href="#berberler">Berberler</a>
+        <a href="#randevular">Randevular</a>
+        <a href="#musteriler">Müşteriler</a>
+      </nav>
+      <a class="header-action" href="/">Site</a>
+    </header>
+
+    <main class="admin-main">
+      <section class="panel-hero">
+        <div>
+          <p class="eyebrow">Yönetim</p>
+          <h1>Randevu ve müşteri takibi</h1>
+          <p>Gelen randevuları onayla, tamamla, iptal et ve müşteri geçmişini tek yerden gör.</p>
+        </div>
+        <form class="pin-box" id="pinForm">
+          <label>
+            Yönetici PIN
+            <input id="pinInput" type="password" inputmode="numeric" placeholder="1234" required>
+          </label>
+          <button class="primary-button" type="submit">Panele Gir</button>
+          <p class="form-message" id="pinMessage" role="status"></p>
+        </form>
+      </section>
+
+      <section class="dashboard-grid" id="dashboardGrid" aria-label="Özet"></section>
+
+      <section class="admin-section" id="berberler">
+        <div class="section-heading">
+          <p class="eyebrow">Berberler</p>
+          <h2>Ekibi düzenle</h2>
+        </div>
+        <form class="barber-form" id="barberForm">
+          <label>
+            Berber adı
+            <input id="barberNameInput" name="name" type="text" placeholder="Örn. Hasan Özkan" required>
+          </label>
+          <label>
+            Uzmanlık
+            <input id="barberTitleInput" name="title" type="text" placeholder="Örn. Saç kesimi ve sakal">
+          </label>
+          <button class="primary-button" type="submit">Berber Ekle</button>
+        </form>
+        <div class="barber-grid" id="barberGrid"></div>
+      </section>
+
+      <section class="admin-section" id="randevular">
+        <div class="section-heading">
+          <p class="eyebrow">Randevular</p>
+          <h2>Takvim akışı</h2>
+        </div>
+        <div class="toolbar">
+          <input id="bookingSearch" type="search" placeholder="İsim, telefon veya kod ara">
+          <input id="bookingDate" type="date">
+          <select id="statusFilter">
+            <option value="all">Tüm durumlar</option>
+            <option value="pending">Bekliyor</option>
+            <option value="confirmed">Onaylandı</option>
+            <option value="completed">Tamamlandı</option>
+            <option value="cancelled">İptal</option>
+            <option value="no_show">Gelmedi</option>
+          </select>
+          <button class="secondary-button" id="refreshBookings" type="button">Yenile</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Kod</th>
+                <th>Müşteri</th>
+                <th>Hizmet</th>
+                <th>Berber</th>
+                <th>Gün / Saat</th>
+                <th>Durum</th>
+                <th>İşlem</th>
+              </tr>
+            </thead>
+            <tbody id="bookingRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="admin-section" id="musteriler">
+        <div class="section-heading">
+          <p class="eyebrow">Müşteriler</p>
+          <h2>Müşteri kayıtları</h2>
+        </div>
+        <div class="toolbar">
+          <input id="customerSearch" type="search" placeholder="Müşteri ara">
+          <button class="secondary-button" id="refreshCustomers" type="button">Yenile</button>
+        </div>
+        <div class="customer-grid" id="customerGrid"></div>
+      </section>
+    </main>
+
+    <script src="admin.js"></script>
+  </body>
+</html>
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>THE BERBER | Yönetim Paneli</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body class="admin-body">
+    <header class="site-header">
+      <a class="brand" href="/">
+        <span class="brand-mark">TB</span>
+        <span>THE BERBER</span>
+      </a>
+      <nav class="nav-links" aria-label="Panel menüsü">
         <a href="#randevular">Randevular</a>
         <a href="#musteriler">Müşteriler</a>
       </nav>
