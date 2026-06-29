@@ -31,6 +31,13 @@ BARBERS = [
     {"id": "deniz", "name": "Deniz Aksoy", "title": "Full bakım ve styling"},
 ]
 
+DEFAULT_CONTACT = {
+    "title": "THE BERBER Kadıköy",
+    "address": "Bağdat Caddesi No: 124, Kadıköy / İstanbul",
+    "phone": "+905551112233",
+    "email": "randevu@theberber.com",
+}
+
 OPEN_TIME = "07:00"
 CLOSE_TIME = "23:30"
 SLOT_STEP_MINUTES = 30
@@ -82,14 +89,30 @@ def init_db():
                 updated_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS services (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                duration INTEGER NOT NULL,
+                price INTEGER NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(date);
             CREATE INDEX IF NOT EXISTS idx_appointments_customer ON appointments(customer_id);
             CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
             """
         )
+        timestamp = now_iso()
         existing_barbers = conn.execute("SELECT COUNT(*) AS total FROM barbers").fetchone()["total"]
         if existing_barbers == 0:
-            timestamp = now_iso()
             conn.executemany(
                 """
                 INSERT INTO barbers (id, name, title, active, created_at, updated_at)
@@ -97,6 +120,25 @@ def init_db():
                 """,
                 [(barber["id"], barber["name"], barber["title"], timestamp, timestamp) for barber in BARBERS],
             )
+        existing_services = conn.execute("SELECT COUNT(*) AS total FROM services").fetchone()["total"]
+        if existing_services == 0:
+            conn.executemany(
+                """
+                INSERT INTO services (id, name, duration, price, active, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 1, ?, ?)
+                """,
+                [
+                    (service["id"], service["name"], service["duration"], service["price"], timestamp, timestamp)
+                    for service in SERVICES
+                ],
+            )
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO settings (key, value, updated_at)
+            VALUES (?, ?, ?)
+            """,
+            [(key, value, timestamp) for key, value in DEFAULT_CONTACT.items()],
+        )
 
 
 def now_iso():
@@ -111,8 +153,128 @@ def clean_phone(phone):
     return re.sub(r"\s+", " ", str(phone or "").strip())
 
 
-def service_by_id(service_id):
-    return next((service for service in SERVICES if service["id"] == service_id), None)
+def list_services(active_only=True):
+    where = "WHERE active = 1" if active_only else ""
+    with connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT id, name, duration, price, active, created_at, updated_at
+            FROM services
+            {where}
+            ORDER BY active DESC, name COLLATE NOCASE ASC
+            """
+        ).fetchall()
+    return [row_to_dict(row) for row in rows]
+
+
+def service_by_id(service_id, active_only=True):
+    if not service_id:
+        return None
+    where = "AND active = 1" if active_only else ""
+    with connect() as conn:
+        row = conn.execute(
+            f"SELECT id, name, duration, price, active FROM services WHERE id = ? {where}",
+            (service_id,),
+        ).fetchone()
+    return row_to_dict(row)
+
+
+def parse_positive_int(payload, key, label):
+    try:
+        value = int(str(payload.get(key, "")).strip())
+    except ValueError as exc:
+        raise ValueError(f"{label} sayı olmalı.") from exc
+    if value <= 0:
+        raise ValueError(f"{label} sıfırdan büyük olmalı.")
+    return value
+
+
+def create_service(payload):
+    name = str(payload.get("name", "")).strip()
+    duration = parse_positive_int(payload, "duration", "Süre")
+    price = parse_positive_int(payload, "price", "Fiyat")
+    if len(name) < 2:
+        raise ValueError("Hizmet adı zorunlu.")
+
+    base_id = slugify_name(name)
+    service_id = base_id
+    timestamp = now_iso()
+    with connect() as conn:
+        index = 2
+        while conn.execute("SELECT 1 FROM services WHERE id = ?", (service_id,)).fetchone():
+            service_id = f"{base_id}-{index}"
+            index += 1
+        conn.execute(
+            """
+            INSERT INTO services (id, name, duration, price, active, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 1, ?, ?)
+            """,
+            (service_id, name, duration, price, timestamp, timestamp),
+        )
+    return service_by_id(service_id, active_only=False)
+
+
+def update_service(service_id, payload):
+    name = str(payload.get("name", "")).strip()
+    duration = parse_positive_int(payload, "duration", "Süre")
+    price = parse_positive_int(payload, "price", "Fiyat")
+    if len(name) < 2:
+        raise ValueError("Hizmet adı zorunlu.")
+
+    timestamp = now_iso()
+    with connect() as conn:
+        result = conn.execute(
+            """
+            UPDATE services
+            SET name = ?, duration = ?, price = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (name, duration, price, timestamp, service_id),
+        )
+    if result.rowcount == 0:
+        return None
+    return service_by_id(service_id, active_only=False)
+
+
+def deactivate_service(service_id):
+    timestamp = now_iso()
+    with connect() as conn:
+        result = conn.execute(
+            "UPDATE services SET active = 0, updated_at = ? WHERE id = ?",
+            (timestamp, service_id),
+        )
+    if result.rowcount == 0:
+        return None
+    return service_by_id(service_id, active_only=False)
+
+
+def get_contact():
+    with connect() as conn:
+        rows = conn.execute("SELECT key, value FROM settings").fetchall()
+    contact = dict(DEFAULT_CONTACT)
+    contact.update({row["key"]: row["value"] for row in rows if row["key"] in DEFAULT_CONTACT})
+    return contact
+
+
+def update_contact(payload):
+    contact = {}
+    for key in DEFAULT_CONTACT:
+        value = str(payload.get(key, "")).strip()
+        if key in {"title", "address"} and len(value) < 2:
+            raise ValueError("İletişim başlığı ve adres zorunlu.")
+        contact[key] = value
+
+    timestamp = now_iso()
+    with connect() as conn:
+        conn.executemany(
+            """
+            INSERT INTO settings (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+            """,
+            [(key, value, timestamp) for key, value in contact.items()],
+        )
+    return get_contact()
 
 
 def list_barbers(active_only=True):
@@ -196,7 +358,7 @@ def appointment_with_names(row):
     item = row_to_dict(row)
     if not item:
         return None
-    service = service_by_id(item["service_id"])
+    service = service_by_id(item["service_id"], active_only=False)
     barber = barber_by_id(item["barber_id"], active_only=False)
     item["service_name"] = service["name"] if service else item["service_id"]
     item["barber_name"] = barber["name"] if barber else item["barber_id"]
@@ -487,8 +649,9 @@ class AppHandler(SimpleHTTPRequestHandler):
             if path == "/api/bootstrap":
                 self.send_json(
                     {
-                        "services": SERVICES,
+                        "services": list_services(active_only=True),
                         "barbers": list_barbers(active_only=True),
+                        "contact": get_contact(),
                         "settings": {"open": OPEN_TIME, "close": CLOSE_TIME, "slotStep": SLOT_STEP_MINUTES},
                     }
                 )
@@ -511,6 +674,12 @@ class AppHandler(SimpleHTTPRequestHandler):
             elif path == "/api/admin/barbers":
                 if self.require_admin():
                     self.send_json({"barbers": list_barbers(active_only=True)})
+            elif path == "/api/admin/services":
+                if self.require_admin():
+                    self.send_json({"services": list_services(active_only=True)})
+            elif path == "/api/admin/contact":
+                if self.require_admin():
+                    self.send_json({"contact": get_contact()})
             elif path == "/admin":
                 self.path = "/admin.html"
                 super().do_GET()
@@ -532,6 +701,11 @@ class AppHandler(SimpleHTTPRequestHandler):
                     return
                 barber = create_barber(self.read_json())
                 self.send_json({"barber": barber}, 201)
+            elif parsed.path == "/api/admin/services":
+                if not self.require_admin():
+                    return
+                service = create_service(self.read_json())
+                self.send_json({"service": service}, 201)
             else:
                 self.send_error_json("Adres bulunamadı.", 404)
         except json.JSONDecodeError:
@@ -542,19 +716,30 @@ class AppHandler(SimpleHTTPRequestHandler):
             self.send_error_json(f"Beklenmeyen hata: {exc}", 500)
 
     def do_PATCH(self):
-        parsed = urlparse(self.path)
-        match = re.fullmatch(r"/api/admin/bookings/([A-F0-9]+)", parsed.path)
-        if not match:
-            self.send_error_json("Adres bulunamadı.", 404)
-            return
         if not self.require_admin():
             return
         try:
-            booking = update_booking(match.group(1), self.read_json())
-            if not booking:
-                self.send_error_json("Randevu bulunamadı.", 404)
+            parsed = urlparse(self.path)
+            booking_match = re.fullmatch(r"/api/admin/bookings/([A-F0-9]+)", parsed.path)
+            service_match = re.fullmatch(r"/api/admin/services/([a-z0-9-]+)", parsed.path)
+            if booking_match:
+                booking = update_booking(booking_match.group(1), self.read_json())
+                if not booking:
+                    self.send_error_json("Randevu bulunamadı.", 404)
+                    return
+                self.send_json({"booking": booking})
                 return
-            self.send_json({"booking": booking})
+            if service_match:
+                service = update_service(service_match.group(1), self.read_json())
+                if not service:
+                    self.send_error_json("Hizmet bulunamadı.", 404)
+                    return
+                self.send_json({"service": service})
+                return
+            if parsed.path == "/api/admin/contact":
+                self.send_json({"contact": update_contact(self.read_json())})
+                return
+            self.send_error_json("Adres bulunamadı.", 404)
         except json.JSONDecodeError:
             self.send_error_json("Geçersiz veri.", 400)
         except ValueError as exc:
@@ -564,18 +749,26 @@ class AppHandler(SimpleHTTPRequestHandler):
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
-        match = re.fullmatch(r"/api/admin/barbers/([a-z0-9-]+)", parsed.path)
-        if not match:
+        barber_match = re.fullmatch(r"/api/admin/barbers/([a-z0-9-]+)", parsed.path)
+        service_match = re.fullmatch(r"/api/admin/services/([a-z0-9-]+)", parsed.path)
+        if not barber_match and not service_match:
             self.send_error_json("Adres bulunamadı.", 404)
             return
         if not self.require_admin():
             return
         try:
-            barber = deactivate_barber(match.group(1))
-            if not barber:
-                self.send_error_json("Berber bulunamadı.", 404)
+            if barber_match:
+                barber = deactivate_barber(barber_match.group(1))
+                if not barber:
+                    self.send_error_json("Berber bulunamadı.", 404)
+                    return
+                self.send_json({"barber": barber})
                 return
-            self.send_json({"barber": barber})
+            service = deactivate_service(service_match.group(1))
+            if not service:
+                self.send_error_json("Hizmet bulunamadı.", 404)
+                return
+            self.send_json({"service": service})
         except Exception as exc:
             self.send_error_json(f"Beklenmeyen hata: {exc}", 500)
 
