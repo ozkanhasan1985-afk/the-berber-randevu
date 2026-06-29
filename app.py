@@ -311,6 +311,13 @@ def slugify_name(name):
     return slug or uuid.uuid4().hex[:8]
 
 
+def clean_record_id(value, fallback):
+    record_id = str(value or "").strip().lower()
+    if re.fullmatch(r"[a-z0-9-]+", record_id):
+        return record_id
+    return slugify_name(fallback)
+
+
 def create_barber(payload):
     name = str(payload.get("name", "")).strip()
     title = str(payload.get("title", "")).strip() or "Berber"
@@ -345,6 +352,94 @@ def deactivate_barber(barber_id):
     if result.rowcount == 0:
         return None
     return barber_by_id(barber_id, active_only=False)
+
+
+def restore_site_state(payload):
+    services = payload.get("services", [])
+    barbers = payload.get("barbers", [])
+    contact_payload = payload.get("contact", {})
+    if not isinstance(services, list) or not isinstance(barbers, list) or not isinstance(contact_payload, dict):
+        raise ValueError("Yedek verisi geçersiz.")
+
+    clean_services = []
+    for service in services:
+        if not isinstance(service, dict):
+            raise ValueError("Hizmet yedek verisi geçersiz.")
+        name = str(service.get("name", "")).strip()
+        if len(name) < 2:
+            raise ValueError("Hizmet adı zorunlu.")
+        clean_services.append(
+            {
+                "id": clean_record_id(service.get("id"), name),
+                "name": name,
+                "duration": parse_positive_int(service, "duration", "Süre"),
+                "price": parse_positive_int(service, "price", "Fiyat"),
+            }
+        )
+
+    clean_barbers = []
+    for barber in barbers:
+        if not isinstance(barber, dict):
+            raise ValueError("Berber yedek verisi geçersiz.")
+        name = str(barber.get("name", "")).strip()
+        title = str(barber.get("title", "")).strip() or "Berber"
+        if len(name) < 2:
+            raise ValueError("Berber adı zorunlu.")
+        clean_barbers.append({"id": clean_record_id(barber.get("id"), name), "name": name, "title": title})
+
+    clean_contact = {}
+    for key, default in DEFAULT_CONTACT.items():
+        value = str(contact_payload.get(key, default)).strip()
+        if key in {"title", "address"} and len(value) < 2:
+            raise ValueError("İletişim başlığı ve adres zorunlu.")
+        clean_contact[key] = value
+
+    timestamp = now_iso()
+    with connect() as conn:
+        conn.execute("UPDATE services SET active = 0, updated_at = ?", (timestamp,))
+        conn.executemany(
+            """
+            INSERT INTO services (id, name, duration, price, active, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 1, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                duration = excluded.duration,
+                price = excluded.price,
+                active = 1,
+                updated_at = excluded.updated_at
+            """,
+            [
+                (service["id"], service["name"], service["duration"], service["price"], timestamp, timestamp)
+                for service in clean_services
+            ],
+        )
+        conn.execute("UPDATE barbers SET active = 0, updated_at = ?", (timestamp,))
+        conn.executemany(
+            """
+            INSERT INTO barbers (id, name, title, active, created_at, updated_at)
+            VALUES (?, ?, ?, 1, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                title = excluded.title,
+                active = 1,
+                updated_at = excluded.updated_at
+            """,
+            [(barber["id"], barber["name"], barber["title"], timestamp, timestamp) for barber in clean_barbers],
+        )
+        conn.executemany(
+            """
+            INSERT INTO settings (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+            """,
+            [(key, value, timestamp) for key, value in clean_contact.items()],
+        )
+
+    return {
+        "services": list_services(active_only=True),
+        "barbers": list_barbers(active_only=True),
+        "contact": get_contact(),
+    }
 
 
 def parse_minutes(value):
@@ -708,6 +803,10 @@ class AppHandler(SimpleHTTPRequestHandler):
                     return
                 service = create_service(self.read_json())
                 self.send_json({"service": service}, 201)
+            elif parsed.path == "/api/admin/state/restore":
+                if not self.require_admin():
+                    return
+                self.send_json(restore_site_state(self.read_json()))
             else:
                 self.send_error_json("Adres bulunamadı.", 404)
         except json.JSONDecodeError:
