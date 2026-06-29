@@ -27,6 +27,8 @@ const contactTitleInput = document.querySelector("#contactTitleInput");
 const contactAddressInput = document.querySelector("#contactAddressInput");
 const contactPhoneInput = document.querySelector("#contactPhoneInput");
 const contactEmailInput = document.querySelector("#contactEmailInput");
+const contactWhatsAppInput = document.querySelector("#contactWhatsAppInput");
+const contactInstagramInput = document.querySelector("#contactInstagramInput");
 
 const labels = {
   pending: "Bekliyor",
@@ -213,6 +215,8 @@ function fillContactForm(contact) {
   contactAddressInput.value = contact.address || "";
   contactPhoneInput.value = contact.phone || "";
   contactEmailInput.value = contact.email || "";
+  contactWhatsAppInput.value = contact.whatsapp || "";
+  contactInstagramInput.value = contact.instagram || "";
 }
 
 function showBookingToast(booking) {
@@ -414,6 +418,8 @@ contactForm.addEventListener("submit", async (event) => {
         address: contactAddressInput.value.trim(),
         phone: contactPhoneInput.value.trim(),
         email: contactEmailInput.value.trim(),
+        whatsapp: contactWhatsAppInput.value.trim(),
+        instagram: contactInstagramInput.value.trim(),
       }),
     });
     pinMessage.textContent = "İletişim kaydedildi.";
