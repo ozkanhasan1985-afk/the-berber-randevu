@@ -36,6 +36,8 @@ DEFAULT_CONTACT = {
     "address": "Bağdat Caddesi No: 124, Kadıköy / İstanbul",
     "phone": "+905551112233",
     "email": "randevu@theberber.com",
+    "whatsapp": "+905551112233",
+    "instagram": "theberber",
 }
 
 OPEN_TIME = "07:00"
