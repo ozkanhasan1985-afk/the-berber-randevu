@@ -575,12 +575,29 @@ td {
   margin: 0 0 8px;
 }
 
-.barber-form {
+.barber-form,
+.service-admin-form,
+.contact-form {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
   gap: 12px;
   align-items: end;
   margin-bottom: 14px;
+}
+
+.barber-form {
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+}
+
+.service-admin-form {
+  grid-template-columns: minmax(180px, 1fr) 120px 120px auto auto;
+}
+
+.contact-form {
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+}
+
+.contact-form .primary-button {
+  grid-column: 1 / -1;
 }
 
 .barber-grid {
@@ -589,7 +606,14 @@ td {
   gap: 14px;
 }
 
-.barber-card {
+.service-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.barber-card,
+.service-admin-card {
   display: flex;
   min-height: 164px;
   flex-direction: column;
@@ -600,9 +624,14 @@ td {
   box-shadow: var(--shadow);
 }
 
-.barber-card p {
+.barber-card p,
+.service-admin-card p {
   color: var(--muted);
   line-height: 1.55;
+}
+
+.service-admin-card h3 {
+  margin: 0 0 8px;
 }
 
 .barber-card.inactive {
@@ -700,6 +729,10 @@ td {
   .barber-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .service-admin-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
@@ -742,7 +775,10 @@ td {
   .toolbar,
   .toolbar:has(#customerSearch),
   .barber-form,
+  .service-admin-form,
+  .contact-form,
   .barber-grid,
+  .service-admin-grid,
   .customer-grid {
     grid-template-columns: 1fr;
   }
