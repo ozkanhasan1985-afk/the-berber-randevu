@@ -42,6 +42,11 @@ let adminPin = localStorage.getItem("theBerberAdminPin") || "";
 let knownPendingBookingIds = new Set();
 let firstNotificationScan = true;
 let bookingWatcher = null;
+let currentServices = [];
+let currentBarbers = [];
+let currentContact = {};
+
+const backupKey = "theBerberPanelBackup";
 
 function todayIso() {
   const now = new Date();
@@ -69,6 +74,79 @@ function escapeHtml(value) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function compactServices(services) {
+  return services.map((service) => ({
+    id: service.id,
+    name: service.name,
+    duration: Number(service.duration),
+    price: Number(service.price),
+  }));
+}
+
+function compactBarbers(barbers) {
+  return barbers.map((barber) => ({
+    id: barber.id,
+    name: barber.name,
+    title: barber.title,
+  }));
+}
+
+function currentState() {
+  return {
+    services: compactServices(currentServices),
+    barbers: compactBarbers(currentBarbers),
+    contact: {
+      title: currentContact.title || "",
+      address: currentContact.address || "",
+      phone: currentContact.phone || "",
+      email: currentContact.email || "",
+      whatsapp: currentContact.whatsapp || "",
+      instagram: currentContact.instagram || "",
+    },
+  };
+}
+
+function stateSignature(state) {
+  return JSON.stringify({
+    services: [...(state.services || [])].sort((a, b) => a.id.localeCompare(b.id)),
+    barbers: [...(state.barbers || [])].sort((a, b) => a.id.localeCompare(b.id)),
+    contact: state.contact || {},
+  });
+}
+
+function readLocalBackup() {
+  try {
+    return JSON.parse(localStorage.getItem(backupKey) || "null");
+  } catch (error) {
+    return null;
+  }
+}
+
+function saveLocalBackup() {
+  localStorage.setItem(
+    backupKey,
+    JSON.stringify({
+      savedAt: new Date().toISOString(),
+      state: currentState(),
+    }),
+  );
+}
+
+async function restoreLocalBackupIfNeeded() {
+  const backup = readLocalBackup();
+  if (!backup?.state) return false;
+  const serverSignature = stateSignature(currentState());
+  const backupSignature = stateSignature(backup.state);
+  if (serverSignature === backupSignature) return false;
+
+  pinMessage.textContent = "Kaydedilmiş panel ayarların geri yükleniyor...";
+  await api("/api/admin/state/restore", {
+    method: "POST",
+    body: JSON.stringify(backup.state),
+  });
+  return true;
 }
 
 function renderDashboard(summary) {
@@ -294,17 +372,20 @@ async function loadCustomers() {
 
 async function loadBarbers() {
   const data = await api("/api/admin/barbers");
-  renderBarbers(data.barbers);
+  currentBarbers = data.barbers;
+  renderBarbers(currentBarbers);
 }
 
 async function loadServices() {
   const data = await api("/api/admin/services");
-  renderServices(data.services);
+  currentServices = data.services;
+  renderServices(currentServices);
 }
 
 async function loadContact() {
   const data = await api("/api/admin/contact");
-  fillContactForm(data.contact);
+  currentContact = data.contact;
+  fillContactForm(currentContact);
 }
 
 async function loadAll() {
@@ -314,10 +395,19 @@ async function loadAll() {
     await loadServices();
     await loadBarbers();
     await loadContact();
+    if (await restoreLocalBackupIfNeeded()) {
+      await loadServices();
+      await loadBarbers();
+      await loadContact();
+      pinMessage.textContent = "Kaydedilmiş panel ayarların geri yüklendi.";
+    }
+    saveLocalBackup();
     await loadBookings();
     await loadCustomers();
     await startBookingWatcher();
-    pinMessage.textContent = "Panel hazır.";
+    if (!pinMessage.textContent.includes("geri yüklendi")) {
+      pinMessage.textContent = "Panel hazır.";
+    }
     pinMessage.classList.remove("error");
   } catch (error) {
     pinMessage.textContent = error.message;
@@ -371,6 +461,7 @@ serviceForm.addEventListener("submit", async (event) => {
     });
     resetServiceForm();
     await loadServices();
+    saveLocalBackup();
     pinMessage.textContent = serviceId ? "Hizmet güncellendi." : "Hizmet eklendi.";
     pinMessage.classList.remove("error");
   } catch (error) {
@@ -399,6 +490,7 @@ serviceAdminGrid.addEventListener("click", async (event) => {
     await api(`/api/admin/services/${deleteButton.dataset.serviceDelete}`, { method: "DELETE" });
     resetServiceForm();
     await loadServices();
+    saveLocalBackup();
     pinMessage.textContent = "Hizmet silindi.";
     pinMessage.classList.remove("error");
   } catch (error) {
@@ -411,7 +503,7 @@ contactForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
     pinMessage.textContent = "İletişim kaydediliyor...";
-    await api("/api/admin/contact", {
+    const data = await api("/api/admin/contact", {
       method: "PATCH",
       body: JSON.stringify({
         title: contactTitleInput.value.trim(),
@@ -422,6 +514,8 @@ contactForm.addEventListener("submit", async (event) => {
         instagram: contactInstagramInput.value.trim(),
       }),
     });
+    currentContact = data.contact;
+    saveLocalBackup();
     pinMessage.textContent = "İletişim kaydedildi.";
     pinMessage.classList.remove("error");
   } catch (error) {
@@ -443,6 +537,7 @@ barberForm.addEventListener("submit", async (event) => {
     });
     barberForm.reset();
     await loadBarbers();
+    saveLocalBackup();
     pinMessage.textContent = "Berber eklendi.";
     pinMessage.classList.remove("error");
   } catch (error) {
@@ -457,6 +552,7 @@ barberGrid.addEventListener("click", async (event) => {
   try {
     await api(`/api/admin/barbers/${button.dataset.barberId}`, { method: "DELETE" });
     await loadBarbers();
+    saveLocalBackup();
     pinMessage.textContent = "Berber silindi.";
     pinMessage.classList.remove("error");
   } catch (error) {
