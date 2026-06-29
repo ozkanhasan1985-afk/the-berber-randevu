@@ -6,9 +6,14 @@ const timeInput = document.querySelector("#timeInput");
 const timeGrid = document.querySelector("#timeGrid");
 const bookingForm = document.querySelector("#bookingForm");
 const formMessage = document.querySelector("#formMessage");
+const contactTitle = document.querySelector("#contactTitle");
+const contactAddress = document.querySelector("#contactAddress");
+const contactPhone = document.querySelector("#contactPhone");
+const contactEmail = document.querySelector("#contactEmail");
 
 let services = [];
 let barbers = [];
+let contact = {};
 
 function money(value) {
   return new Intl.NumberFormat("tr-TR", {
@@ -102,6 +107,13 @@ function fillSelects() {
   barbers.forEach((barber) => barberSelect.append(option(barber.id, `${barber.name} - ${barber.title}`)));
 }
 
+function renderContact() {
+  contactTitle.textContent = contact.title || "THE BERBER";
+  contactAddress.textContent = contact.address || "";
+  contactPhone.href = `tel:${contact.phone || ""}`;
+  contactEmail.href = `mailto:${contact.email || ""}`;
+}
+
 async function loadSlots() {
   const serviceId = serviceSelect.value;
   const barberId = barberSelect.value;
@@ -126,10 +138,12 @@ async function init() {
   const data = await api("/api/bootstrap");
   services = data.services;
   barbers = data.barbers;
+  contact = data.contact || {};
   dateInput.min = todayIso();
   dateInput.value = todayIso();
   renderServices();
   fillSelects();
+  renderContact();
 }
 
 bookingForm.addEventListener("submit", async (event) => {
