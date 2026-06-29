@@ -14,6 +14,19 @@ const barberForm = document.querySelector("#barberForm");
 const barberNameInput = document.querySelector("#barberNameInput");
 const barberTitleInput = document.querySelector("#barberTitleInput");
 const barberGrid = document.querySelector("#barberGrid");
+const serviceForm = document.querySelector("#serviceForm");
+const serviceIdInput = document.querySelector("#serviceIdInput");
+const serviceNameInput = document.querySelector("#serviceNameInput");
+const serviceDurationInput = document.querySelector("#serviceDurationInput");
+const servicePriceInput = document.querySelector("#servicePriceInput");
+const serviceSubmitButton = document.querySelector("#serviceSubmitButton");
+const serviceCancelButton = document.querySelector("#serviceCancelButton");
+const serviceAdminGrid = document.querySelector("#serviceAdminGrid");
+const contactForm = document.querySelector("#contactForm");
+const contactTitleInput = document.querySelector("#contactTitleInput");
+const contactAddressInput = document.querySelector("#contactAddressInput");
+const contactPhoneInput = document.querySelector("#contactPhoneInput");
+const contactEmailInput = document.querySelector("#contactEmailInput");
 
 const labels = {
   pending: "Bekliyor",
@@ -150,6 +163,58 @@ function renderBarbers(barbers) {
     .join("");
 }
 
+function money(value) {
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function resetServiceForm() {
+  serviceForm.reset();
+  serviceIdInput.value = "";
+  serviceSubmitButton.textContent = "Hizmet Ekle";
+  serviceCancelButton.hidden = true;
+}
+
+function renderServices(services) {
+  if (services.length === 0) {
+    serviceAdminGrid.innerHTML = `<article class="service-admin-card"><p>Hizmet bulunamadı.</p></article>`;
+    return;
+  }
+  serviceAdminGrid.innerHTML = services
+    .map(
+      (service) => `
+        <article class="service-admin-card">
+          <div>
+            <h3>${escapeHtml(service.name)}</h3>
+            <p>${service.duration} dakika<br>${money(service.price)}</p>
+          </div>
+          <div class="action-row">
+            <button
+              class="small-button"
+              data-service-edit="${service.id}"
+              data-service-name="${escapeHtml(service.name)}"
+              data-service-duration="${service.duration}"
+              data-service-price="${service.price}"
+              type="button"
+            >Düzenle</button>
+            <button class="small-button danger-button" data-service-delete="${service.id}" type="button">Sil</button>
+          </div>
+        </article>
+      `,
+    )
+    .join("");
+}
+
+function fillContactForm(contact) {
+  contactTitleInput.value = contact.title || "";
+  contactAddressInput.value = contact.address || "";
+  contactPhoneInput.value = contact.phone || "";
+  contactEmailInput.value = contact.email || "";
+}
+
 function showBookingToast(booking) {
   let container = document.querySelector("#bookingToastContainer");
   if (!container) {
@@ -228,11 +293,23 @@ async function loadBarbers() {
   renderBarbers(data.barbers);
 }
 
+async function loadServices() {
+  const data = await api("/api/admin/services");
+  renderServices(data.services);
+}
+
+async function loadContact() {
+  const data = await api("/api/admin/contact");
+  fillContactForm(data.contact);
+}
+
 async function loadAll() {
   try {
     pinMessage.textContent = "Panel yükleniyor...";
     await loadSummary();
+    await loadServices();
     await loadBarbers();
+    await loadContact();
     await loadBookings();
     await loadCustomers();
     await startBookingWatcher();
@@ -273,6 +350,79 @@ bookingRows.addEventListener("click", async (event) => {
 customerSearch.addEventListener("input", loadCustomers);
 refreshBookings.addEventListener("click", loadBookings);
 refreshCustomers.addEventListener("click", loadCustomers);
+
+serviceForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const serviceId = serviceIdInput.value;
+  const payload = {
+    name: serviceNameInput.value.trim(),
+    duration: serviceDurationInput.value,
+    price: servicePriceInput.value,
+  };
+  try {
+    pinMessage.textContent = serviceId ? "Hizmet güncelleniyor..." : "Hizmet ekleniyor...";
+    await api(serviceId ? `/api/admin/services/${serviceId}` : "/api/admin/services", {
+      method: serviceId ? "PATCH" : "POST",
+      body: JSON.stringify(payload),
+    });
+    resetServiceForm();
+    await loadServices();
+    pinMessage.textContent = serviceId ? "Hizmet güncellendi." : "Hizmet eklendi.";
+    pinMessage.classList.remove("error");
+  } catch (error) {
+    pinMessage.textContent = error.message;
+    pinMessage.classList.add("error");
+  }
+});
+
+serviceCancelButton.addEventListener("click", resetServiceForm);
+
+serviceAdminGrid.addEventListener("click", async (event) => {
+  const editButton = event.target.closest("button[data-service-edit]");
+  const deleteButton = event.target.closest("button[data-service-delete]");
+  if (editButton) {
+    serviceIdInput.value = editButton.dataset.serviceEdit;
+    serviceNameInput.value = editButton.dataset.serviceName;
+    serviceDurationInput.value = editButton.dataset.serviceDuration;
+    servicePriceInput.value = editButton.dataset.servicePrice;
+    serviceSubmitButton.textContent = "Hizmeti Güncelle";
+    serviceCancelButton.hidden = false;
+    serviceNameInput.focus();
+    return;
+  }
+  if (!deleteButton) return;
+  try {
+    await api(`/api/admin/services/${deleteButton.dataset.serviceDelete}`, { method: "DELETE" });
+    resetServiceForm();
+    await loadServices();
+    pinMessage.textContent = "Hizmet silindi.";
+    pinMessage.classList.remove("error");
+  } catch (error) {
+    pinMessage.textContent = error.message;
+    pinMessage.classList.add("error");
+  }
+});
+
+contactForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    pinMessage.textContent = "İletişim kaydediliyor...";
+    await api("/api/admin/contact", {
+      method: "PATCH",
+      body: JSON.stringify({
+        title: contactTitleInput.value.trim(),
+        address: contactAddressInput.value.trim(),
+        phone: contactPhoneInput.value.trim(),
+        email: contactEmailInput.value.trim(),
+      }),
+    });
+    pinMessage.textContent = "İletişim kaydedildi.";
+    pinMessage.classList.remove("error");
+  } catch (error) {
+    pinMessage.textContent = error.message;
+    pinMessage.classList.add("error");
+  }
+});
 
 barberForm.addEventListener("submit", async (event) => {
   event.preventDefault();
