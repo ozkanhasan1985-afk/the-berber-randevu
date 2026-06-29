@@ -24,6 +24,9 @@ const labels = {
 };
 
 let adminPin = localStorage.getItem("theBerberAdminPin") || "";
+let knownPendingBookingIds = new Set();
+let firstNotificationScan = true;
+let bookingWatcher = null;
 
 function todayIso() {
   const now = new Date();
@@ -138,17 +141,66 @@ function renderBarbers(barbers) {
             <p>${escapeHtml(barber.title)}</p>
           </div>
           <div class="customer-meta">
-            <span>${barber.active ? "Aktif" : "Pasif"}</span>
-            ${
-              barber.active
-                ? `<button class="small-button" data-barber-id="${barber.id}" type="button">Pasifleştir</button>`
-                : ""
-            }
+            <span>Aktif</span>
+            <button class="small-button danger-button" data-barber-id="${barber.id}" type="button">Sil</button>
           </div>
         </article>
       `,
     )
     .join("");
+}
+
+function showBookingToast(booking) {
+  let container = document.querySelector("#bookingToastContainer");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "bookingToastContainer";
+    container.className = "toast-container";
+    document.body.append(container);
+  }
+
+  const toast = document.createElement("article");
+  toast.className = "booking-toast";
+  toast.innerHTML = `
+    <strong>Yeni randevu</strong>
+    <span>${escapeHtml(booking.customer_name)} - ${escapeHtml(booking.service_name)}</span>
+    <small>${booking.date} / ${booking.time}</small>
+  `;
+  container.prepend(toast);
+  setTimeout(() => toast.remove(), 30000);
+}
+
+async function checkNewBookings() {
+  if (!adminPin) return;
+  try {
+    const data = await api("/api/admin/bookings?status=pending");
+    const currentIds = new Set(data.bookings.map((booking) => booking.id));
+    if (firstNotificationScan) {
+      knownPendingBookingIds = currentIds;
+      firstNotificationScan = false;
+      return;
+    }
+
+    const newBookings = data.bookings.filter((booking) => !knownPendingBookingIds.has(booking.id));
+    newBookings.forEach(showBookingToast);
+    knownPendingBookingIds = currentIds;
+    if (newBookings.length > 0) {
+      await loadSummary();
+      await loadBookings();
+      await loadCustomers();
+    }
+  } catch (error) {
+    pinMessage.textContent = error.message;
+    pinMessage.classList.add("error");
+  }
+}
+
+async function startBookingWatcher() {
+  firstNotificationScan = true;
+  knownPendingBookingIds = new Set();
+  if (bookingWatcher) clearInterval(bookingWatcher);
+  await checkNewBookings();
+  bookingWatcher = setInterval(checkNewBookings, 8000);
 }
 
 async function loadSummary() {
@@ -183,6 +235,7 @@ async function loadAll() {
     await loadBarbers();
     await loadBookings();
     await loadCustomers();
+    await startBookingWatcher();
     pinMessage.textContent = "Panel hazır.";
     pinMessage.classList.remove("error");
   } catch (error) {
@@ -248,7 +301,7 @@ barberGrid.addEventListener("click", async (event) => {
   try {
     await api(`/api/admin/barbers/${button.dataset.barberId}`, { method: "DELETE" });
     await loadBarbers();
-    pinMessage.textContent = "Berber pasifleştirildi.";
+    pinMessage.textContent = "Berber silindi.";
     pinMessage.classList.remove("error");
   } catch (error) {
     pinMessage.textContent = error.message;
