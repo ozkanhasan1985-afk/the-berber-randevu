@@ -510,7 +510,7 @@ class AppHandler(SimpleHTTPRequestHandler):
                     self.send_json({"customers": list_customers(params)})
             elif path == "/api/admin/barbers":
                 if self.require_admin():
-                    self.send_json({"barbers": list_barbers(active_only=False)})
+                    self.send_json({"barbers": list_barbers(active_only=True)})
             elif path == "/admin":
                 self.path = "/admin.html"
                 super().do_GET()
