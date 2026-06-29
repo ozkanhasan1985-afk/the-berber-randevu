@@ -10,6 +10,8 @@ const contactTitle = document.querySelector("#contactTitle");
 const contactAddress = document.querySelector("#contactAddress");
 const contactPhone = document.querySelector("#contactPhone");
 const contactEmail = document.querySelector("#contactEmail");
+const contactWhatsApp = document.querySelector("#contactWhatsApp");
+const contactInstagram = document.querySelector("#contactInstagram");
 
 let services = [];
 let barbers = [];
@@ -110,8 +112,23 @@ function fillSelects() {
 function renderContact() {
   contactTitle.textContent = contact.title || "THE BERBER";
   contactAddress.textContent = contact.address || "";
-  contactPhone.href = `tel:${contact.phone || ""}`;
-  contactEmail.href = `mailto:${contact.email || ""}`;
+  const phone = contact.phone || "";
+  const email = contact.email || "";
+  const whatsappDigits = String(contact.whatsapp || phone).replace(/\D/g, "");
+  const instagram = String(contact.instagram || "").trim().replace(/^@/, "");
+  const instagramPath = instagram
+    .replace(/^https?:\/\/(www\.)?instagram\.com\//, "")
+    .split(/[/?#]/)[0]
+    .replace(/^\/+|\/+$/g, "");
+
+  contactPhone.hidden = !phone;
+  contactPhone.href = `tel:${phone}`;
+  contactEmail.hidden = !email;
+  contactEmail.href = `mailto:${email}`;
+  contactWhatsApp.hidden = !whatsappDigits;
+  contactWhatsApp.href = `https://wa.me/${whatsappDigits}`;
+  contactInstagram.hidden = !instagramPath;
+  contactInstagram.href = `https://www.instagram.com/${instagramPath}`;
 }
 
 async function loadSlots() {
