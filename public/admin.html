@@ -13,7 +13,9 @@
         <span>THE BERBER</span>
       </a>
       <nav class="nav-links" aria-label="Panel menüsü">
+        <a href="#hizmetler">Hizmetler</a>
         <a href="#berberler">Berberler</a>
+        <a href="#iletisim">İletişim</a>
         <a href="#randevular">Randevular</a>
         <a href="#musteriler">Müşteriler</a>
       </nav>
@@ -39,6 +41,31 @@
 
       <section class="dashboard-grid" id="dashboardGrid" aria-label="Özet"></section>
 
+      <section class="admin-section" id="hizmetler">
+        <div class="section-heading">
+          <p class="eyebrow">Hizmetler</p>
+          <h2>Hizmetleri düzenle</h2>
+        </div>
+        <form class="service-admin-form" id="serviceForm">
+          <input id="serviceIdInput" name="id" type="hidden">
+          <label>
+            Hizmet adı
+            <input id="serviceNameInput" name="name" type="text" placeholder="Örn. Saç Kesimi" required>
+          </label>
+          <label>
+            Süre
+            <input id="serviceDurationInput" name="duration" type="number" min="1" step="1" placeholder="45" required>
+          </label>
+          <label>
+            Fiyat
+            <input id="servicePriceInput" name="price" type="number" min="1" step="1" placeholder="650" required>
+          </label>
+          <button class="primary-button" id="serviceSubmitButton" type="submit">Hizmet Ekle</button>
+          <button class="secondary-button" id="serviceCancelButton" type="button" hidden>Vazgeç</button>
+        </form>
+        <div class="service-admin-grid" id="serviceAdminGrid"></div>
+      </section>
+
       <section class="admin-section" id="berberler">
         <div class="section-heading">
           <p class="eyebrow">Berberler</p>
@@ -56,6 +83,32 @@
           <button class="primary-button" type="submit">Berber Ekle</button>
         </form>
         <div class="barber-grid" id="barberGrid"></div>
+      </section>
+
+      <section class="admin-section" id="iletisim">
+        <div class="section-heading">
+          <p class="eyebrow">İletişim</p>
+          <h2>Site iletişimi</h2>
+        </div>
+        <form class="contact-form" id="contactForm">
+          <label>
+            Başlık
+            <input id="contactTitleInput" name="title" type="text" placeholder="THE BERBER Kadıköy" required>
+          </label>
+          <label>
+            Adres
+            <input id="contactAddressInput" name="address" type="text" placeholder="Adres" required>
+          </label>
+          <label>
+            Telefon
+            <input id="contactPhoneInput" name="phone" type="tel" placeholder="+905551112233">
+          </label>
+          <label>
+            E-posta
+            <input id="contactEmailInput" name="email" type="email" placeholder="randevu@theberber.com">
+          </label>
+          <button class="primary-button" type="submit">İletişimi Kaydet</button>
+        </form>
       </section>
 
       <section class="admin-section" id="randevular">
