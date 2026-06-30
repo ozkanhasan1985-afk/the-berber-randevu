@@ -5,16 +5,23 @@ import re
 import sqlite3
 import unicodedata
 import uuid
+from base64 import b64encode
 from datetime import date, datetime, timedelta
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.error import URLError
+from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.request import Request, urlopen
 
 BASE_DIR = Path(__file__).resolve().parent
 PUBLIC_DIR = BASE_DIR / "public"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "the_berber.sqlite"
 ADMIN_PIN = os.environ.get("THE_BERBER_ADMIN_PIN", "1234")
+TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "").strip()
+TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "").strip()
+TWILIO_WHATSAPP_FROM = os.environ.get("TWILIO_WHATSAPP_FROM", "").strip()
+THE_BERBER_NOTIFY_WHATSAPP_TO = os.environ.get("THE_BERBER_NOTIFY_WHATSAPP_TO", "").strip()
 
 SERVICES = [
     {"id": "haircut", "name": "Saç Kesimi", "duration": 45, "price": 650},
@@ -180,6 +187,78 @@ def state_snapshot():
 
 def clean_phone(phone):
     return re.sub(r"\s+", " ", str(phone or "").strip())
+
+
+def whatsapp_address(value):
+    number = str(value or "").strip()
+    if not number:
+        return ""
+    if number.startswith("whatsapp:"):
+        return number
+    return f"whatsapp:{number}"
+
+
+def whatsapp_notifications_configured():
+    return all([TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM, THE_BERBER_NOTIFY_WHATSAPP_TO])
+
+
+def whatsapp_notification_status():
+    missing = []
+    if not TWILIO_ACCOUNT_SID:
+        missing.append("TWILIO_ACCOUNT_SID")
+    if not TWILIO_AUTH_TOKEN:
+        missing.append("TWILIO_AUTH_TOKEN")
+    if not TWILIO_WHATSAPP_FROM:
+        missing.append("TWILIO_WHATSAPP_FROM")
+    if not THE_BERBER_NOTIFY_WHATSAPP_TO:
+        missing.append("THE_BERBER_NOTIFY_WHATSAPP_TO")
+    return {
+        "provider": "twilio",
+        "enabled": len(missing) == 0,
+        "missing": missing,
+        "to": whatsapp_address(THE_BERBER_NOTIFY_WHATSAPP_TO) if THE_BERBER_NOTIFY_WHATSAPP_TO else "",
+    }
+
+
+def send_whatsapp_notification(booking):
+    if not whatsapp_notifications_configured() or not booking:
+        return {"sent": False, "skipped": True}
+
+    body = "\n".join(
+        [
+            "THE BERBER yeni randevu",
+            f"Müşteri: {booking.get('customer_name', '-')}",
+            f"Telefon: {booking.get('phone', '-')}",
+            f"Hizmet: {booking.get('service_name', '-')}",
+            f"Berber: {booking.get('barber_name', '-')}",
+            f"Tarih/Saat: {booking.get('date', '-')} {booking.get('time', '-')}",
+            f"Kod: {booking.get('id', '-')}",
+        ]
+    )
+    payload = urlencode(
+        {
+            "From": whatsapp_address(TWILIO_WHATSAPP_FROM),
+            "To": whatsapp_address(THE_BERBER_NOTIFY_WHATSAPP_TO),
+            "Body": body,
+        }
+    ).encode("utf-8")
+    auth = b64encode(f"{TWILIO_ACCOUNT_SID}:{TWILIO_AUTH_TOKEN}".encode("utf-8")).decode("ascii")
+    request = Request(
+        f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_ACCOUNT_SID}/Messages.json",
+        data=payload,
+        headers={
+            "Authorization": f"Basic {auth}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=12) as response:
+            response.read()
+        return {"sent": True, "skipped": False}
+    except URLError as exc:
+        print(f"[THE BERBER] WhatsApp bildirimi gönderilemedi: {exc}")
+        return {"sent": False, "skipped": False, "error": str(exc)}
 
 
 def list_services(active_only=True):
@@ -605,7 +684,9 @@ def create_booking(payload):
                 timestamp,
             ),
         )
-    return get_booking(appointment_id)
+    booking = get_booking(appointment_id)
+    send_whatsapp_notification(booking)
+    return booking
 
 
 def get_booking(appointment_id):
@@ -805,6 +886,9 @@ class AppHandler(SimpleHTTPRequestHandler):
             elif path == "/api/admin/state":
                 if self.require_admin():
                     self.send_json({"state": state_snapshot(), "defaultState": active_default_signature()})
+            elif path == "/api/admin/notifications":
+                if self.require_admin():
+                    self.send_json({"whatsapp": whatsapp_notification_status()})
             elif path == "/admin":
                 self.path = "/admin.html"
                 super().do_GET()
