@@ -38,7 +38,8 @@ const labels = {
   no_show: "Gelmedi",
 };
 
-let adminPin = localStorage.getItem("theBerberAdminPin") || "";
+localStorage.removeItem("theBerberAdminPin");
+let adminPin = "";
 let knownPendingBookingIds = new Set();
 let firstNotificationScan = true;
 let bookingWatcher = null;
@@ -449,7 +450,6 @@ async function loadAll() {
 pinForm.addEventListener("submit", (event) => {
   event.preventDefault();
   adminPin = pinInput.value.trim();
-  localStorage.setItem("theBerberAdminPin", adminPin);
   loadAll();
 });
 
@@ -593,7 +593,3 @@ barberGrid.addEventListener("click", async (event) => {
 });
 
 bookingDate.value = todayIso();
-if (adminPin) {
-  pinInput.value = adminPin;
-  loadAll();
-}
