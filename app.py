@@ -25,10 +25,7 @@ SERVICES = [
 ]
 
 BARBERS = [
-    {"id": "arda", "name": "Arda Kaya", "title": "Fade ve modern kesimler"},
-    {"id": "mert", "name": "Mert Tan", "title": "Sakal tasarımı ve bakım"},
-    {"id": "emir", "name": "Emir Onur", "title": "Klasik kesim ve styling"},
-    {"id": "deniz", "name": "Deniz Aksoy", "title": "Full bakım ve styling"},
+    {"id": "hasan-ozkan", "name": "Hasan Özkan", "title": "Usta berber"},
 ]
 
 DEFAULT_CONTACT = {
@@ -113,12 +110,17 @@ def init_db():
             """
         )
         timestamp = now_iso()
-        existing_barbers = conn.execute("SELECT COUNT(*) AS total FROM barbers").fetchone()["total"]
+        existing_barbers = conn.execute("SELECT COUNT(*) AS total FROM barbers WHERE active = 1").fetchone()["total"]
         if existing_barbers == 0:
             conn.executemany(
                 """
                 INSERT INTO barbers (id, name, title, active, created_at, updated_at)
                 VALUES (?, ?, ?, 1, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    title = excluded.title,
+                    active = 1,
+                    updated_at = excluded.updated_at
                 """,
                 [(barber["id"], barber["name"], barber["title"], timestamp, timestamp) for barber in BARBERS],
             )
