@@ -94,7 +94,7 @@ function compactBarbers(barbers) {
 }
 
 function currentState() {
-  return {
+  return normalizeState({
     services: compactServices(currentServices),
     barbers: compactBarbers(currentBarbers),
     contact: {
@@ -105,14 +105,30 @@ function currentState() {
       whatsapp: currentContact.whatsapp || "",
       instagram: currentContact.instagram || "",
     },
+  });
+}
+
+function normalizeState(state) {
+  return {
+    services: compactServices(state.services || []),
+    barbers: compactBarbers(state.barbers || []),
+    contact: {
+      title: state.contact?.title || "",
+      address: state.contact?.address || "",
+      phone: state.contact?.phone || "",
+      email: state.contact?.email || "",
+      whatsapp: state.contact?.whatsapp || "",
+      instagram: state.contact?.instagram || "",
+    },
   };
 }
 
 function stateSignature(state) {
+  const normalized = normalizeState(state);
   return JSON.stringify({
-    services: [...(state.services || [])].sort((a, b) => a.id.localeCompare(b.id)),
-    barbers: [...(state.barbers || [])].sort((a, b) => a.id.localeCompare(b.id)),
-    contact: state.contact || {},
+    services: normalized.services.sort((a, b) => a.id.localeCompare(b.id)),
+    barbers: normalized.barbers.sort((a, b) => a.id.localeCompare(b.id)),
+    contact: normalized.contact,
   });
 }
 
@@ -122,6 +138,17 @@ function readLocalBackup() {
   } catch (error) {
     return null;
   }
+}
+
+function hasUsableBackup(state) {
+  return (
+    Array.isArray(state?.services) &&
+    state.services.length > 0 &&
+    Array.isArray(state?.barbers) &&
+    state.barbers.length > 0 &&
+    String(state?.contact?.title || "").trim().length > 1 &&
+    String(state?.contact?.address || "").trim().length > 1
+  );
 }
 
 function saveLocalBackup() {
@@ -136,10 +163,14 @@ function saveLocalBackup() {
 
 async function restoreLocalBackupIfNeeded() {
   const backup = readLocalBackup();
-  if (!backup?.state) return false;
+  if (!backup?.state || !hasUsableBackup(backup.state)) return false;
   const serverSignature = stateSignature(currentState());
   const backupSignature = stateSignature(backup.state);
   if (serverSignature === backupSignature) return false;
+
+  const data = await api("/api/admin/state");
+  const defaultSignature = stateSignature(data.defaultState);
+  if (serverSignature !== defaultSignature) return false;
 
   pinMessage.textContent = "Kaydedilmiş panel ayarların geri yükleniyor...";
   await api("/api/admin/state/restore", {
