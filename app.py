@@ -151,6 +151,31 @@ def row_to_dict(row):
     return dict(row) if row is not None else None
 
 
+def active_default_signature():
+    return {
+        "services": [
+            {"id": service["id"], "name": service["name"], "duration": service["duration"], "price": service["price"]}
+            for service in SERVICES
+        ],
+        "barbers": [{"id": barber["id"], "name": barber["name"], "title": barber["title"]} for barber in BARBERS],
+        "contact": dict(DEFAULT_CONTACT),
+    }
+
+
+def state_snapshot():
+    return {
+        "services": [
+            {"id": service["id"], "name": service["name"], "duration": service["duration"], "price": service["price"]}
+            for service in list_services(active_only=True)
+        ],
+        "barbers": [
+            {"id": barber["id"], "name": barber["name"], "title": barber["title"]}
+            for barber in list_barbers(active_only=True)
+        ],
+        "contact": get_contact(),
+    }
+
+
 def clean_phone(phone):
     return re.sub(r"\s+", " ", str(phone or "").strip())
 
@@ -360,6 +385,8 @@ def restore_site_state(payload):
     contact_payload = payload.get("contact", {})
     if not isinstance(services, list) or not isinstance(barbers, list) or not isinstance(contact_payload, dict):
         raise ValueError("Yedek verisi geçersiz.")
+    if not services or not barbers:
+        raise ValueError("Yedekte en az bir hizmet ve bir berber olmalı.")
 
     clean_services = []
     for service in services:
@@ -435,11 +462,7 @@ def restore_site_state(payload):
             [(key, value, timestamp) for key, value in clean_contact.items()],
         )
 
-    return {
-        "services": list_services(active_only=True),
-        "barbers": list_barbers(active_only=True),
-        "contact": get_contact(),
-    }
+    return state_snapshot()
 
 
 def parse_minutes(value):
@@ -777,6 +800,9 @@ class AppHandler(SimpleHTTPRequestHandler):
             elif path == "/api/admin/contact":
                 if self.require_admin():
                     self.send_json({"contact": get_contact()})
+            elif path == "/api/admin/state":
+                if self.require_admin():
+                    self.send_json({"state": state_snapshot(), "defaultState": active_default_signature()})
             elif path == "/admin":
                 self.path = "/admin.html"
                 super().do_GET()
