@@ -12,3 +12,11 @@ services:
         sync: false
       - key: THE_BERBER_PUBLIC_URL
         value: https://theberber.eu.org
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_FROM
+        sync: false
+      - key: THE_BERBER_NOTIFY_WHATSAPP_TO
+        sync: false
